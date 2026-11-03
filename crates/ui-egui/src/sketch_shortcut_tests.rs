@@ -2,14 +2,15 @@ use crate::scenario::Harness;
 use serde_json::json;
 use solidcraft_engine::Sel;
 use solidcraft_engine::doc::{FeatureKind, PlaneRef};
+use solidcraft_engine::geom::prelude::*;
 
 fn tool(h: &Harness) -> Option<&str> {
     h.app.tool.as_ref().map(|t| t.cmd)
 }
 
-fn normal(h: &Harness) -> solidcraft_engine::geom::Vec3 {
+fn normal(h: &Harness) -> solidcore_record::Vec3 {
     let active = h.app.session.active_sketch;
-    h.app.session.world_state().sketches.iter().find(|s| Some(s.feature) == active).map(|s| s.plane.normal()).unwrap_or_default()
+    h.app.session.world_state().unwrap().sketches.iter().find(|s| Some(s.feature) == active).map(|s| s.plane.normal()).unwrap_or_default()
 }
 
 fn press(h: &mut Harness, key: &str) {
@@ -79,7 +80,7 @@ fn sketch_keys_outside_a_sketch_sketch_on_the_selected_plane_and_start_their_too
         h.app.session.selection = vec![Sel::Plane { name: "XZ".into() }];
         press(&mut h, key);
         assert!(h.app.session.active_sketch.is_some(), "{key}: no sketch opened");
-        assert_eq!(h.app.session.world_state().sketches.len(), 1, "{key}");
+        assert_eq!(h.app.session.world_state().unwrap().sketches.len(), 1, "{key}");
         assert!(normal(&h).y.abs() > 0.999, "{key}: not on XZ: {:?}", normal(&h));
         if cmd == "sketch.project" {
             assert!(h.app.preferences.project_options_dialog, "{key}: options are enabled by default");
@@ -190,7 +191,7 @@ fn construction_key_outside_a_sketch_opens_nothing_and_keys_in_a_sketch_keep_it(
     assert!(h.app.session.active_sketch.is_none());
     h.app.run("sketch.create", json!({"plane":"XY"})).unwrap();
     press(&mut h, "C");
-    assert_eq!(h.app.session.world_state().sketches.len(), 1);
+    assert_eq!(h.app.session.world_state().unwrap().sketches.len(), 1);
     assert_eq!(tool(&h), Some("sketch.circle.center"));
 }
 
@@ -501,7 +502,7 @@ fn a_line_starts_on_a_curve_or_midpoint_and_keeps_that_snap_after_undo() {
                     assert!((actual[0] - expected[0]).abs() < 1e-5 && (actual[1] - expected[1]).abs() < 1e-5, "{actual:?}, expected {expected:?}");
                 }
                 let sid = h.app.session.active_sketch.unwrap();
-                let state = h.app.session.world_state();
+                let state = h.app.session.world_state().unwrap();
                 let sketch = &state.sketch(sid).unwrap().sketch;
                 let guide = sketch.curve_index("guide").unwrap();
                 assert!(
@@ -536,7 +537,7 @@ fn a_line_starts_at_a_curve_crossing_and_keeps_it_after_undo() {
         let drawn = lines(&h);
         assert_eq!(drawn.len(), 3, "{:?}", h.app.status);
         assert_line(drawn[2], [-20.0, 10.0], end);
-        let state = h.app.session.world_state();
+        let state = h.app.session.world_state().unwrap();
         let sketch = &state.sketch(h.app.session.active_sketch.unwrap()).unwrap().sketch;
         assert_eq!(
             sketch.constraints.iter().filter(|c| matches!(c.kind, solidcraft_engine::sketch::ConstraintKind::PointOnCurve { .. })).count(),

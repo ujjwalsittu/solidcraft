@@ -1,11 +1,12 @@
 //! Sketch modify tools: trim, extend, break, fillet, chamfer, offset, mirror, circular and
 //! rectangular patterns, move/copy and scale.
 
+use solidcraft_geom::prelude::*;
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 use serde_json::{Value, json};
+use solidcore_record::{Plane, Vec2};
 use solidcraft_doc::ProfileSel;
-use solidcraft_geom::{Plane, Vec2};
 use solidcraft_sketch::{ConstraintKind, Curve, CurveKind, Shape, Sketch, Wire, WireSpace, intersections, intersections_within};
 
 use super::sketch::{add_c, coincident_points, edit, ids_of, line_or_axis_ref, solve_current};
@@ -2572,7 +2573,7 @@ fn offset_side(sk: &mut Sketch, cmd: &str, order: &[(usize, bool)], sources: &[(
                 idx.push(pb);
                 idx.dedup();
                 if idx.len() >= 2 {
-                    made.push(sk.add_curve(CurveKind::Spline { pts: idx, control: false, degree: 3, periodic: false }, None)?);
+                    made.push(sk.add_curve(CurveKind::Spline { pts: idx, control: false, degree: 3, periodic: false, nurbs: None }, None)?);
                 }
             }
             Piece::Line(..) => {
@@ -3466,7 +3467,7 @@ fn drawn_copy_selection(s: &Session, p: &Value, ids: Vec<String>) -> Result<(Vec
         }
         let plane = match wire.space {
             WireSpace::Component => s.model.state().sketch(id).map(|sk| sk.plane),
-            WireSpace::World => s.world_state().sketch(id).map(|sk| sk.plane),
+            WireSpace::World => s.world_state()?.sketch(id).map(|sk| sk.plane),
         }
         .ok_or_else(|| bad(cmd, "sketch plane is unavailable"))?;
         drawn.push((wire.clone(), plane));
