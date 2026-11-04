@@ -2,6 +2,7 @@
 
 use crate::fonts::RichTextExt as _;
 use crate::icons::glyphs::pin_icon;
+use crate::ui_kit::BackingTooltipExt as _;
 use crate::ui_kit::{self, Container, Edge, Surface};
 use egui::{Align2, Color32, FontId, Rect, Sense, Stroke, pos2, vec2};
 use serde_json::json;
@@ -402,7 +403,7 @@ pub fn app_bar(app: &mut SolveApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     let app_bar = Container::new(ui.ctx(), Surface::ApplicationBar).edge("sc_appbar", Edge::Top);
     let frame = Container::new(ui.ctx(), Surface::ApplicationBar).edge_frame(t.app_bar);
-    app_bar.exact_size(APP_BAR_HEIGHT).show_separator_line(false).frame(frame).show(ui, |ui| {
+    Container::new(ui.ctx(), Surface::ApplicationBar).show_edge(ui, app_bar.exact_size(APP_BAR_HEIGHT).show_separator_line(false), frame, |ui| {
         let r = ui.max_rect();
         // The bar is the window's title bar: its empty space moves the window.
         if app.custom_titlebar || app.integrated_titlebar {
@@ -441,7 +442,7 @@ pub fn app_bar(app: &mut SolveApp, ui: &mut egui::Ui) {
             ui.painter().rect_filled(home.shrink(3.0), t.radius_sm, t.app_bar_hover_button);
         }
         icons::paint_app_bar(ui.painter(), home.shrink(7.0), "home", if idle { 1.0 } else { 0.35 });
-        if home_response.on_hover_text(home_tip).clicked() && idle {
+        if home_response.backing_on_hover_text(home_tip).clicked() && idle {
             app.home.show(app.session.revision);
         }
         x = home.right() + 8.0;
@@ -480,7 +481,7 @@ pub fn app_bar(app: &mut SolveApp, ui: &mut egui::Ui) {
                 ui.painter().rect_filled(br.shrink(3.0), t.radius_sm, t.app_bar_hover_button);
             }
             icons::paint_app_bar(ui.painter(), Rect::from_center_size(br.center(), vec2(18.0, 18.0)), icon, if enabled { 1.0 } else { 0.35 });
-            let clicked = resp.on_hover_text(tip).clicked();
+            let clicked = resp.backing_on_hover_text(tip).clicked();
             enabled && clicked
         };
         let step = if compact_actions { 22.0 } else { 34.0 };
@@ -591,7 +592,7 @@ pub fn app_bar(app: &mut SolveApp, ui: &mut egui::Ui) {
             }
             crate::i18n::tr_label("Report a bug — review a screenshot and open a GitHub draft")
         };
-        if response.on_hover_text(tip).clicked() {
+        if response.backing_on_hover_text(tip).clicked() {
             crate::help::run(app, &ui.ctx().clone(), "report");
         }
         // Settings sits immediately left of Help (also Ctrl+,).
@@ -611,7 +612,7 @@ pub fn app_bar(app: &mut SolveApp, ui: &mut egui::Ui) {
         } else {
             format!("{} (Ctrl+,)", app.tr("ui.preferences"))
         };
-        if gresp.on_hover_text(prefs_tip).clicked() {
+        if gresp.backing_on_hover_text(prefs_tip).clicked() {
             crate::prefs::open_at(app, 0);
         }
         if app.header.version == VersionPlace::Header && version_room(r, captions, tabs_start, version.size().x).is_some() {
@@ -623,7 +624,7 @@ pub fn app_bar(app: &mut SolveApp, ui: &mut egui::Ui) {
                 Sense::click(),
             );
             let url = crate::update::release_notes_url(crate::update::current_version(), crate::update::release_build());
-            let vresp = vresp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(&url);
+            let vresp = vresp.on_hover_cursor(egui::CursorIcon::PointingHand).backing_on_hover_text(&url);
             if vresp.hovered() || vresp.has_focus() {
                 ui.painter().hline(vrect.x_range(), vrect.bottom(), Stroke::new(1.0, t.app_bar_text));
             }
@@ -874,7 +875,7 @@ fn file_menu(app: &mut SolveApp, ctx: &egui::Context) {
                 // The browser can install SolidCraft as an app (`install`): only while it offers to.
                 if let Some(offer) = crate::install::offered(app)
                     && crate::context_menu::button(ui, crate::i18n::tr("install.menu"), "new")
-                        .on_hover_text(crate::i18n::tr("install.button_tip"))
+                        .backing_on_hover_text(crate::i18n::tr("install.button_tip"))
                         .clicked()
                 {
                     crate::install::start(app, offer);
@@ -1384,7 +1385,7 @@ fn ribbon_tabs(app: &mut SolveApp, ui: &mut egui::Ui, row: Rect) {
                 app.start(id);
             }
             if let Err(reason) = ready {
-                response.on_disabled_hover_text(reason);
+                response.backing_on_disabled_hover_text(reason);
             }
             x += width + t.space_2;
         }
@@ -1600,7 +1601,7 @@ pub fn toolbar(app: &mut SolveApp, ui: &mut egui::Ui) {
             ribbon_galley(ui, pos2(ws.center().x - 6.0, ws.top() + if labels { 89.0 } else { 70.0 }), galley, t.text_dim);
             dropdown_arrow(&painter, pos2(ws.center().x - 6.0 + label_width / 2.0 + 7.0, ws.top() + if labels { 89.5 } else { 70.5 }), t.text_dim);
         }
-        if wresp.on_hover_text(app.tr("ui.change_workspace")).clicked() {
+        if wresp.backing_on_hover_text(app.tr("ui.change_workspace")).clicked() {
             crate::context_menu::toggle_for(app, ws, ws.left_bottom(), crate::context_menu::Target::Workspace);
         }
         crate::scenario::publish_rect("toolbar", r);
@@ -1771,7 +1772,7 @@ pub fn toolbar(app: &mut SolveApp, ui: &mut egui::Ui) {
                 }
                 dropdown_arrow(&painter, pos2(br.center().x, br.bottom() - 3.0), t.text_dim);
                 let tip = format!("{} ({})", app.tr_label(panel), shown.len().max(cmds.len()));
-                if fresp.on_hover_text(tip).clicked() && enabled_panel {
+                if fresp.backing_on_hover_text(tip).clicked() && enabled_panel {
                     ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("sc_panel_open"), popup_id));
                     opened = true;
                 }
@@ -2202,8 +2203,11 @@ pub fn toolbar(app: &mut SolveApp, ui: &mut egui::Ui) {
                                 } else {
                                     ui_kit::command_menu_button(ui, c.id, info.label, info.icon, &shortcut, info.enabled)
                                 };
-                                let response =
-                                    if let Some(hint) = persistent_hint(app, c, info.enabled) { response.on_hover_text(hint) } else { response };
+                                let response = if let Some(hint) = persistent_hint(app, c, info.enabled) {
+                                    response.backing_on_hover_text(hint)
+                                } else {
+                                    response
+                                };
                                 crate::scenario::publish_handle(&format!("toolbar:{}", c.id), response.rect.center());
                                 if response.clicked() {
                                     app.start_at(c.id, Some(response.rect));
@@ -2214,7 +2218,7 @@ pub fn toolbar(app: &mut SolveApp, ui: &mut egui::Ui) {
                     }
                 });
                 crate::scenario::publish_target("toolbar:overflow", response.response.rect);
-                response.response.on_hover_text(crate::i18n::tr_label("More toolbar panels"));
+                response.response.backing_on_hover_text(crate::i18n::tr_label("More toolbar panels"));
             });
         }
 
@@ -2285,7 +2289,7 @@ fn assistant_button(app: &mut SolveApp, ui: &mut egui::Ui, at: Rect) {
         AssistantMark::Waiting(count) => crate::ui_kit::AssistantEntryState::Waiting(count),
     };
     crate::ui_kit::assistant_entry(ui, &resp, state, app.agent_chat.open, ui.ctx().global_style().animation_time > 0.0);
-    if resp.on_hover_text(tip).clicked() {
+    if resp.backing_on_hover_text(tip).clicked() {
         crate::agent_chat::toggle(app);
     }
 }
@@ -2306,9 +2310,9 @@ const CONSTRAINT_GRID_WIDTH: f32 = 82.0;
 /// where present; other commands intentionally show only their name and registered shortcut.
 fn ribbon_tooltip(app: &SolveApp, response: egui::Response, command: &solidcraft_engine::CommandSpec, disabled: Option<&str>) -> egui::Response {
     if let Some(hint) = persistent_hint(app, command, disabled.is_none() && response.enabled() && command.info(&app.session).enabled) {
-        return response.on_hover_text(hint);
+        return response.backing_on_hover_text(hint);
     }
-    response.on_hover_ui(|ui| {
+    response.backing_on_hover_ui(|ui| {
         let t = Tokens::get();
         let name = app.tr_label(crate::render_workspace::interactive_command_info(app, command).label);
         let name_width =
@@ -2324,14 +2328,17 @@ fn ribbon_tooltip(app: &SolveApp, response: egui::Response, command: &solidcraft
             ribbon_text(ui, rect.center(), name, t.font_heading, t.text, true);
             if let Some(key) = crate::keymap::display_for(app, command.id) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    egui::Frame::NONE
-                        .fill(t.panel_header)
-                        .stroke(t.tertiary_border(t.border))
-                        .corner_radius(t.radius_sm.saturating_sub(1))
-                        .inner_margin(egui::Margin::symmetric(5, 1))
-                        .show(ui, |ui| {
+                    crate::ui_kit::Container::show_backing(
+                        ui,
+                        egui::Frame::NONE
+                            .fill(t.panel_header)
+                            .stroke(t.tertiary_border(t.border))
+                            .corner_radius(t.radius_sm.saturating_sub(1))
+                            .inner_margin(egui::Margin::symmetric(5, 1)),
+                        |ui| {
                             ui.label(egui::RichText::new(key).monospace().color(t.text_dim));
-                        });
+                        },
+                    );
                 });
             }
         });
@@ -2387,7 +2394,7 @@ fn reveal_tooltip(app: &SolveApp, ui: &egui::Ui, rect: Rect, command: &solidcraf
     let label = app.tr_label(info.label);
     let shortcut = crate::keymap::display_for(app, command.id).map(|k| format!("  ({k})")).unwrap_or_default();
     let help = crate::command_help::help(command.id);
-    if let Some(shown) = tip.show(|ui| {
+    if let Some(shown) = crate::ui_kit::Container::show_tooltip(egui::Id::new(("ribbon_reveal", command.id)), tip, |ui| {
         ui.set_max_width(300.0);
         ui.label(egui::RichText::new(format!("{label}{shortcut}")).strong());
         if let Some(help) = help {
@@ -3041,7 +3048,7 @@ fn dropdown_cell(
     if let Some(pin) = pin {
         crate::scenario::publish_handle(&format!("dropdown_pin:{}", c.id), pr.center());
         let tip = if pinned { "Remove from Toolbar" } else { "Pin to Toolbar" };
-        if pin.on_hover_text(crate::i18n::tr_label(tip)).clicked() {
+        if pin.backing_on_hover_text(crate::i18n::tr_label(tip)).clicked() {
             return RowAction::TogglePin;
         }
     }
@@ -5664,6 +5671,96 @@ mod sketch_return_tab_tests {
         h.app.run("sketch.create", json!({"plane":"XY"})).unwrap();
         h.app.run("sketch.finish", json!({})).unwrap();
         assert_eq!(h.app.ui.tab, "MODEL", "{start}: falls back to MODEL");
+    }
+}
+
+#[cfg(test)]
+mod command_start_tab_tests {
+    use super::*;
+    use crate::scenario::Harness;
+
+    /// The issue's starting point: a design with a box, nothing selected, the ribbon on MODEL.
+    fn on_model_with_a_box() -> Harness {
+        let mut h = Harness::new();
+        h.app.home.open = false;
+        h.app.run("solid.box", json!({"length": 40, "width": 30, "height": 20})).unwrap();
+        h.app.ui.tab = "MODEL".into();
+        h.app.status = None;
+        h
+    }
+
+    /// #10540: a command that only reports a missing parameter or that there is nothing to work
+    /// on starts nothing, so the ribbon stays on the tab it was started from, as a disabled
+    /// command already does. The commands are the issue's table, started from MODEL.
+    #[test]
+    fn a_refused_command_leaves_the_ribbon_on_the_tab_it_was_started_from() {
+        for id in [
+            "occurrence.ground",
+            "joint.limits",
+            "component.break_link",
+            "timeline.dependents",
+            "view.rename",
+            "view.delete",
+            "view.navigate",
+            "edit.restore_checkpoint",
+            "parameters.move",
+            "library.inspect",
+            "surface.fair",
+            "surface.match",
+            "sheet.export_bend_table",
+        ] {
+            let mut h = on_model_with_a_box();
+            h.app.start(id);
+            assert_eq!(h.app.ui.tab, "MODEL", "{id}: a refused command leaves the tab where it was");
+            assert!(h.app.dialog.is_none() && h.app.tool.is_none(), "{id}: nothing started");
+        }
+    }
+
+    /// The issue's exact repro through the control channel: Ground from MODEL says `occurrence`
+    /// must be an id or name; the status line keeps the refusal, the ribbon does not move to
+    /// ASSEMBLE.
+    #[test]
+    fn ground_from_command_search_names_the_missing_occurrence_and_stays_on_model() {
+        let mut h = on_model_with_a_box();
+        h.call("ui.start", json!({"command": "occurrence.ground"}));
+        assert_eq!(h.app.ui.tab, "MODEL", "Ground started nothing: the ribbon stays on MODEL");
+        let (status, _, error) = h.app.status.clone().expect("the refusal reaches the status line");
+        assert!(error, "{status}");
+        assert!(status.contains("occurrence"), "{status}");
+    }
+
+    /// #10540: View Fit, Home and the other view display commands act on the view the same way
+    /// however they are started. F6, the navigation bar and the view cube never move the ribbon,
+    /// so command search and the VIEW tab's menus must not either.
+    #[test]
+    fn view_display_commands_keep_the_ribbon_on_the_tab_they_were_started_from() {
+        for id in ["view.fit", "view.home", "view.spin", "view.grid", "view.ground_shadow", "view.navigation_bar", "view.visual_style", "view.tool"] {
+            let mut h = on_model_with_a_box();
+            h.app.ui.tab = "INSPECT".into();
+            h.app.start(id);
+            assert_eq!(h.app.ui.tab, "INSPECT", "{id}: started from INSPECT, the ribbon stays there");
+        }
+    }
+
+    /// The other half of #10540: a command that does start still moves the ribbon to its tab —
+    /// Extrude's dialog opens and the ribbon follows it to MODEL from INSPECT.
+    #[test]
+    fn a_command_that_opens_still_moves_the_ribbon_to_its_tab() {
+        let mut h = on_model_with_a_box();
+        h.app.ui.tab = "INSPECT".into();
+        h.app.start("solid.extrude");
+        assert!(h.app.dialog.is_some(), "Extrude's dialog opens");
+        assert_eq!(h.app.ui.tab, "MODEL", "the ribbon follows the command that started");
+    }
+
+    /// A command that runs without a dialog or tool has run: the ribbon keeps the tab it moved
+    /// to (#10540's "or it runs"). List Contact Sets answers with the sets, no parameters.
+    #[test]
+    fn a_command_that_runs_still_moves_the_ribbon() {
+        let mut h = on_model_with_a_box();
+        h.app.start("contact.list");
+        assert_eq!(h.app.ui.tab, "ASSEMBLE", "the command ran: the ribbon stays on its tab");
+        assert!(!h.app.status.as_ref().is_some_and(|(_, _, error)| *error));
     }
 }
 

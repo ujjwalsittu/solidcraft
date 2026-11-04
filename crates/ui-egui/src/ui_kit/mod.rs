@@ -4,6 +4,7 @@
 mod actions;
 mod assistant;
 mod assistant_entry;
+mod attention;
 mod checks;
 mod choice;
 mod color;
@@ -57,6 +58,7 @@ pub(crate) use actions::*;
 pub use actions::{Button, button};
 pub(crate) use assistant::*;
 pub(crate) use assistant_entry::*;
+pub(crate) use attention::*;
 #[cfg(test)]
 pub(crate) use checks::tests::{raster as raster_ui, textures_update as update_test_textures};
 #[cfg(test)]
@@ -66,7 +68,7 @@ pub(crate) use choice::*;
 pub(crate) use color::*;
 pub(crate) use compare::*;
 pub(crate) use confirm::{Confirm, Tone};
-pub use container::{Container, DockEdges, Edge, Surface};
+pub use container::{BackingTooltipExt, Container, DockEdges, Edge, Surface};
 pub(crate) use details::*;
 pub(crate) use disclosure::*;
 pub(crate) use drag::*;

@@ -3,6 +3,7 @@
 //! every colour comes from `Tokens`. A card sizes to the width its container gives it and its
 //! figure keeps the figure's aspect ratio.
 use super::{metrics::dimension, preferences::centred_text};
+use crate::ui_kit::BackingTooltipExt as _;
 use crate::{scenario, theme::Tokens};
 use egui::{Color32, FontId, Painter, Rect, Response, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 
@@ -187,8 +188,8 @@ fn paint_card(ui: &mut Ui, card: &Card, width: f32, tile: bool) -> Response {
     let kind = if tile { egui::WidgetType::Checkbox } else { egui::WidgetType::RadioButton };
     response.widget_info(|| egui::WidgetInfo::selected(kind, enabled, card.selected, card.label));
     scenario::publish_target(&format!("prefs:card:{}", card.label), rect);
-    let response = response.on_hover_text(card.label);
-    let response = if let Some(options) = card.options { response.on_hover_text(options) } else { response };
+    let response = response.backing_on_hover_text(card.label);
+    let response = if let Some(options) = card.options { response.backing_on_hover_text(options) } else { response };
     if enabled { response.on_hover_cursor(egui::CursorIcon::PointingHand) } else { response }
 }
 
@@ -388,7 +389,7 @@ pub(crate) fn help_icon(ui: &mut Ui, text: &str) -> Response {
     p.line_segment([pos2(rect.center().x, rect.top() + size * 0.46), pos2(rect.center().x, rect.bottom() - size * 0.24)], Stroke::new(1.2, ink));
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), text));
     scenario::publish_target("prefs:help_icon", rect);
-    response.on_hover_text(text)
+    response.backing_on_hover_text(text)
 }
 
 /// Which items of a carousel are shown: the first one and how many fit between the two arrows.
@@ -403,6 +404,7 @@ pub(super) fn carousel_window(count: usize, offset: usize, available: f32, item_
 }
 
 /// A row of items with a previous and a next arrow; an arrow is dimmed and inert at its end.
+/// An arrow moves by the items that fit (#11434); the last page ends on the last item.
 /// `item` paints the item at an index into a column `item_width` wide and `item_height` high.
 pub(crate) fn carousel(
     ui: &mut Ui,
@@ -424,7 +426,7 @@ pub(crate) fn carousel(
         ui.spacing_mut().item_spacing.x = gap;
         let can_back = first > 0;
         if carousel_arrow(ui, vec2(arrow, height), -1.0, can_back, crate::i18n::tr("prefs.carousel_previous")).clicked() {
-            next_offset = first.saturating_sub(1);
+            next_offset = first.saturating_sub(visible);
         }
         for index in first..first + visible {
             ui.allocate_ui_with_layout(vec2(dimension(item_width), height), egui::Layout::top_down(egui::Align::Min), |ui| {
@@ -434,7 +436,7 @@ pub(crate) fn carousel(
         }
         let can_forward = first + visible < count;
         if carousel_arrow(ui, vec2(arrow, height), 1.0, can_forward, crate::i18n::tr("prefs.carousel_next")).clicked() {
-            next_offset = (first + 1).min(count.saturating_sub(visible));
+            next_offset = (first + visible).min(count.saturating_sub(visible));
         }
     });
     ui.data_mut(|d| d.insert_temp(key, next_offset));

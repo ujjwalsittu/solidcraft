@@ -3854,6 +3854,9 @@ impl Renderer {
         pass.set_bind_group(0, scene_bind(m, &res.bind), &[]);
         tris(pass, &res.ghost, &m.ghost);
         tris(pass, &res.trans, &m.shadow);
+        pass.set_bind_group(0, scene_bind(sk, &res.bind), &[]);
+        tris(pass, &res.trans, &sk.shadow);
+        pass.set_bind_group(0, scene_bind(m, &res.bind), &[]);
         if phase == Phase::BeforeSeeThrough {
             return;
         }
@@ -4681,6 +4684,55 @@ mod tests {
 mod glass_tests {
     use super::*;
 
+    /// Intel UHD 620 OpenGL collapsed long line quads or expanded short ones across the
+    /// viewport with vector/scalar direction division (#8053). Exercise the actual
+    /// OpenGL shader rather than the native headless selector, which skips GL on Windows.
+    #[test]
+    fn opengl_draws_grid_lines_in_every_direction_and_at_a_point() {
+        let mut descriptor = crate::instance_descriptor_from_env();
+        descriptor.backends = wgpu::Backends::GL;
+        let instance = wgpu::Instance::new(descriptor);
+        let policy = crate::select::Policy::from_env().expect("a valid GPU test policy");
+        let Some((adapter, _)) = crate::select::pick_among(pollster::block_on(instance.enumerate_adapters(wgpu::Backends::GL)), policy) else {
+            eprintln!("skipped: no OpenGL adapter qualifies under {}", policy.name());
+            return;
+        };
+        eprintln!("OpenGL regression adapter: {:?}", adapter.get_info());
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            required_limits: wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
+            ..Default::default()
+        }))
+        .expect("the OpenGL adapter opens a device");
+        let window = GpuTarget { format: wgpu::TextureFormat::Rgba8Unorm, depth: None, samples: 1, tess: false, oit: false };
+        // Ten world units span 32 pixels here; a four-pixel line covers over 100 pixels.
+        // A point or a very short line stays a small cap, never a fill over the viewport.
+        let cases = [
+            ([-5.0, 0.0, 0.0], [5.0, 0.0, 0.0], 100..=256),
+            ([5.0, 0.0, 0.0], [-5.0, 0.0, 0.0], 100..=256),
+            ([0.0, -5.0, 0.0], [0.0, 5.0, 0.0], 100..=256),
+            ([0.0, 5.0, 0.0], [0.0, -5.0, 0.0], 100..=256),
+            ([-5.0, -5.0, 0.0], [5.0, 5.0, 0.0], 120..=256),
+            ([5.0, 5.0, 0.0], [-5.0, -5.0, 0.0], 120..=256),
+            ([-5.0, 5.0, 0.0], [5.0, -5.0, 0.0], 120..=256),
+            ([0.0; 3], [0.0; 3], 10..=64),
+            ([0.0; 3], [0.0001, 0.0001, 0.0], 10..=64),
+        ];
+        for offscreen in [false, true] {
+            let target = if offscreen { GpuTarget { depth: Some(wgpu::TextureFormat::Depth24PlusStencil8), ..window } } else { window };
+            let mut renderer = Renderer::with_window_target(&device, target, window, None);
+            for (index, (a, b, expected)) in cases.iter().enumerate() {
+                let mut scene = GpuScene::default();
+                let red = scene.color([255, 0, 0, 255]);
+                scene.under_line(*a, *b, red, 4.0);
+                let mut frame = test_frame(scene, 1.0);
+                frame.key = index as u64 + 1;
+                let pixels = render_frame(&mut renderer, &device, &queue, &frame, false);
+                let coloured = pixels.as_chunks::<4>().0.iter().filter(|p| p[0] > 240 && p[1] < 30 && p[2] < 30).count();
+                assert!(expected.contains(&coloured), "{a:?} to {b:?}, offscreen {offscreen}: {coloured} line pixels, expected {expected:?}");
+            }
+        }
+    }
+
     #[test]
     fn ground_shadow_does_not_require_order_independent_transparency() {
         let batch = || Some(Batch { parts: Vec::new(), chunk: TRI_SIZE * 6 });
@@ -4702,18 +4754,35 @@ mod glass_tests {
             scene.shadow_tri(p, shadow_color);
         }
         for samples in [1, 4] {
-            let Some(shadow) = middle_pixel_with_samples(scene.clone(), true, samples) else {
-                eprintln!("skipping: no GPU adapter");
-                return;
-            };
-            assert!(shadow[..3].iter().all(|c| (125..=129).contains(c)), "{samples}× alpha-blended shadow: {shadow:?}");
-            let mut occluded = scene.clone();
-            let green = occluded.color([0, 255, 0, 255]);
-            for mut p in square {
-                p[2] = 5.0;
-                occluded.tri(p, [0.0; 3], green);
+            for view_dependent in [false, true] {
+                let draw = |mut scene: GpuScene| {
+                    let sketch = if view_dependent {
+                        GpuScene { shadow: std::mem::take(&mut scene.shadow), palette: scene.palette.clone(), ..Default::default() }
+                    } else {
+                        GpuScene::default()
+                    };
+                    if view_dependent {
+                        // The shadow must use its own palette, not the model's same-numbered slot.
+                        assert!(Arc::make_mut(&mut scene.palette).set(shadow_color, [255, 0, 0, 255]));
+                    }
+                    middle_pixel_in_slots_with_samples(scene, sketch, true, samples)
+                };
+                let Some(shadow) = draw(scene.clone()) else {
+                    eprintln!("skipping: no GPU adapter");
+                    return;
+                };
+                assert!(
+                    shadow[..3].iter().all(|c| (125..=129).contains(c)),
+                    "{samples}x view-dependent={view_dependent} alpha-blended shadow: {shadow:?}"
+                );
+                let mut occluded = scene.clone();
+                let green = occluded.color([0, 255, 0, 255]);
+                for mut p in square {
+                    p[2] = 5.0;
+                    occluded.tri(p, [0.0; 3], green);
+                }
+                assert_eq!(draw(occluded), Some([0, 255, 0, 255]), "opaque geometry hides the ground shadow");
             }
-            assert_eq!(middle_pixel_with_samples(occluded, true, samples), Some([0, 255, 0, 255]), "opaque geometry hides the ground shadow");
         }
     }
 
@@ -4877,6 +4946,10 @@ mod glass_tests {
     }
 
     fn middle_pixel_with_samples(scene: GpuScene, oit: bool, samples: u32) -> Option<[u8; 4]> {
+        middle_pixel_in_slots_with_samples(scene, GpuScene::default(), oit, samples)
+    }
+
+    fn middle_pixel_in_slots_with_samples(scene: GpuScene, sketch: GpuScene, oit: bool, samples: u32) -> Option<[u8; 4]> {
         const SIZE: u32 = 64;
         let (_, device, queue) = crate::open_headless().ok()?;
         let depth = crate::depth_format(&device, true);
@@ -4893,8 +4966,8 @@ mod glass_tests {
             upload_error: None,
             key: 1,
             slot: Arc::new(Mutex::new(Some(scene))),
-            sketch_key: 0,
-            sketch_slot: none(),
+            sketch_key: 2,
+            sketch_slot: Arc::new(Mutex::new(Some(sketch))),
             hl_key: 0,
             hl_slot: none(),
             pv_key: 0,

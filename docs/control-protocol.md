@@ -235,14 +235,34 @@ The control channel is **on by default**. SolidCraft listens on `127.0.0.1` only
 so agents can drive the app without a launch flag. Every connection still needs this launch's
 token (below); nothing else on the machine, and nothing off it, can send a command.
 
-Internal rendering harness: `ui.blur {radius_px?, surface_alpha?}` queries or sets
-session-only panel blur. Radius is finite physical pixels in 0..40; the optional
+Internal rendering harness: `ui.blur {radius_px?, surface_alpha?, fixture?}` queries or sets
+session-only panel blur. Radius is finite physical pixels in 0..60; the optional
 capture tint is 0..1 (`null` restores ordinary fills). This is not a saved
-preference. The reply contains requested radius, capability/reason and cumulative
+preference. Theme-authored blur is edited with `ui.prefs {theme_options:{theme_id:{blur:18}}}`;
+the theme must declare the option. Finite fractional values remain valid, although
+the UI slider edits in steps of one physical pixel. The `ui.prefs` option definition's
+`available`/translated `reason` describes current app/device/OS availability; its
+value remains the saved/default intent while unavailable.
+
+The `ui.blur` reply contains requested radius, renderer capability, app-aware
+`available`/`reason`, `guard` (tier cap, streak, notice, session opt-out), and cumulative
 actual effect counters, including live resources and encoded passes. Unsupported
 software/web/source contexts stay on ordinary painting. Use `ui.screenshot` for
 panel evidence; `ui.render` remains a model-only capture. Activation, full egui GPU
 fixture and manager-run evidence commands are in [blur-behind.md](blur-behind.md).
+Supplying `radius_px` selects the legacy session-only rendering harness override;
+`fixture:"clear"` removes that override and any injected availability reason,
+returning to theme intent. It does not revoke a quality-guard Undo opt-out.
+
+Explicit evidence-only fixtures are `gpu-software`, `reduce-transparency`, and
+`web-unsupported` (force an unavailable reason), plus `guard-60` (inject sixty
+eligible 23 ms samples into the transient guard at the current positive radius).
+The reply labels the active injection as `evidence_fixture`; `null` means none.
+These are not end-user settings, real adapter/OS readings or performance measurements.
+There is no fixture that makes an unsupported renderer available. They do not
+change saved options, host OS settings or document history. All supplied fields
+are validated before mutation. Capture fixture screenshots with that label in the
+evidence description, and clear the fixture before checking real capabilities.
 
 | Launch | What listens |
 |---|---|
@@ -462,7 +482,7 @@ the legacy behavior: surface shading and Continuity remain independently active 
 and `view.status_items` faithfully lists both, using a separate stable `continuity` ID. Together
 with Section there are at most three slots. Turning the preference back on keeps the last
 successfully started or changed analysis at the oldest analysis-group position beside Section.
-Queries never normalize state. Graphics Restore Defaults restores `true`; other page resets
+Queries never normalize state. Graphics Restore page defaults restores `true`; other page resets
 leave it alone. It applies immediately to all open designs without document edits or undo.
 Cancel restores the opening preference value, but does not restart an analysis already stopped
 by switching to single mode. Run that analysis again to restore coexistence after cancelling.
@@ -682,6 +702,9 @@ One setting per line, sorted by name. A change that adds a setting adds its own 
 - `default_units`
 - `dialog_buttons` (`bottom` (default), `top`: a feature dialog's OK, Cancel and Apply sit in its title row instead of under its inputs, #6708; the buttons keep their handles, and `dialog:close` is then Cancel's; the Sketch panel's Finish Sketch row moves above its options, #9860)
 - `dialog_place` (`edge` (default) or `left_column`: command dialogs open in the left column in place of the browser and the History, #6707)
+- `dimension_input` (`view` (default): a sketch dimension's value is typed in a box on the dimension; `window`: placing a dimension with the Dimension tool, or double-clicking one, opens a small window at it with the value field (handle `dimwin:value`), arrows that step the value (`dimwin:up`, `dimwin:down`), a check (`dimwin:ok`, also Enter) and a cross (`dimwin:cancel`, also Esc), #7246)
+- `dimension_step_deg` (default 1, 0.001…180: what the dimension window's arrows, Up/Down and the wheel over its field add to an angle, in degrees)
+- `dimension_step_mm` (default 1, 0.001…1000: what the window's arrows, Up/Down and the wheel over its field add to a length, in millimetres, written in the unit the value is written in)
 - `extrude_auto_to_object` (default true: in the Extrude dialog, with a profile picked, a face, vertex or parallel plane picked off its plane switches the extent to To Object, unless the Profiles box was clicked into; it applies to Extrude dialogs opened afterwards)
 - `frame_rate_details` (default false: with the frame rate, a frame-time graph of the frames drawn with the triangles over it, a frame-time histogram and what the GPU drew; clicking the readout switches it)
 - `graphics_adapter` (exact card name, or empty for Automatic; applies after restart; `WGPU_ADAPTER_NAME` takes precedence)
@@ -706,7 +729,11 @@ One setting per line, sorted by name. A change that adds a setting adds its own 
 - `msaa`
 - `nav` (`fusion`, `solidworks`, `creo`, `inventor`, `alias`, `blender`, `tinkercad`, `openscad`, `touchpad`)
 - `nav_bridge_enabled` (default false) and `nav_bridge_port` (default 8765: a device's own app on this computer moves the view, [the navigation bridge](3d-mouse.md#device-apps-the-navigation-bridge))
+- `navigator_arrows` (default true: the custom view navigator has the cube's orbit and roll arrows around its body; also `view.navigator {arrows}`)
 - `navigator_fit` (default false: a view chosen on the view cube or the axis gizmo also looks at the middle of the model from the one distance that fits its bounding sphere in the free part of the view, at `home_fit_size`; Home and an opened design use the same zoom and centre while it is on, so views chosen after them only turn; #10091)
+- `navigator_home` (default true: the custom view navigator has the cube's Home button beside it; also `view.navigator {home}`)
+- `navigator_style` (`axes` (default), `cube`, `custom`: the body chosen with `view.navigator`, the cube until one is chosen)
+- `navigator_texture` (`themed` (default): the custom view navigator in the cube's colours; `modeled`: in its body's own appearance and edge colour)
 - `offer_stand_up`
 - `orbit_around` (`view_centre` (default: what Pan moves and Fit frames), `origin` (the world origin stays still on screen), `cursor` (the model point under the pointer when the drag began); the older `orbit_cursor` boolean still sets `cursor` when true)
 - `orbit_reverse` (default false: Shift with two-finger scrolling orbits the other way)
@@ -720,6 +747,7 @@ One setting per line, sorted by name. A change that adds a setting adds its own 
 - `quick_measure` (default false: the selection's length, area or distance in the view's bottom right corner, the rect `measure:quick`; #7000)
 - `ribbon_reveal` (default false: hovering a result in Search commands switches the ribbon to the command's tab and marks its button, or opens the panel drop-down that holds it on its row, handle `ribbon:reveal`; leaving the results goes back to the tab before; a command started from the search blinks there, and a running command from a drop-down marks its panel label, `ribbon:running_section:<TAB>:<SECTION>`, #7287)
 - `right_drag_orbits` (default true; false: a right drag the mouse preset would orbit leaves the camera alone, #6492)
+- `select_hidden_edges` (default false: v0.30.1 visible-only edge picking; true allows ordinary edge picks through faces in Shaded with hidden edges, including Fillet inputs; hidden bodies and section-clipped edges stay excluded)
 - `select_other_hidden` (default true: Select Other includes hidden geometry near the pointer; false restores the original visible-only list under the pointer)
 - `show_frame_rate` (default false: frames per second in the view's bottom-right corner, counting the frames the view draws anyway; it reads 0 FPS once the view is idle)
 - `sketch_auto_dimensions` (default false: each shape drawn in a sketch gets all its dimensions at the sizes drawn, as `sketch.draw.dimensioned` with `as_drawn`; typed values win)
@@ -770,7 +798,7 @@ when both occur in a call. Imported themes cannot claim the retired built-in ids
 
 Theme option values persist per theme, including a followed file's own id, through the same
 preference store in the browser and on desktop. Switching themes restores their saved values;
-Interface's Restore Defaults clears them. Preference exports and settings profiles carry values;
+Interface's Restore page defaults clears them. Preference exports and settings profiles carry values;
 `theme_export` carries the author's defaults. Saved entries that no longer fit a definition remain
 stored and use the default with a notice; unknown ids have a notice and no effective value.
 
@@ -834,11 +862,26 @@ channel; see [mcp.md](mcp.md).
 {"id":5,"method":"ui.screenshot","params":{"path":"/tmp/part.png"}}
 ```
 
-Preferences → Navigation → View navigator offers **Signed axes** (the original default) and
-**Cube**. This choice is saved independently of the mouse preset. The control channel selects it
-with `ui.prefs {"navigator_style":"axes"}` or `ui.prefs {"navigator_style":"cube"}`.
-Existing settings without this field keep signed axes. Signed-axis tips choose principal views;
-clicking an aligned tip again reverses the view.
+Preferences → Navigation → View navigator offers **Signed axes** (the original default),
+**Cube** and **Custom**; a right-click anywhere on the navigator offers the same three. This choice is
+saved independently of the mouse preset. The control channel selects it with
+`ui.prefs {"navigator_style":"axes"}`, `"cube"` or `"custom"`. Existing settings without this field
+keep signed axes. Signed-axis tips choose principal views; clicking an aligned tip again reverses
+the view.
+
+Custom draws a body in place of the cube, at the cube's size; a click on one of its faces looks
+straight at it, and with `navigator_fit` on it also frames the model, as the cube does. Picking
+Custom from the navigator's menu opens the Custom View Navigator panel, with OK and Cancel: pick
+the body in the view, then its texture (`themed`: the cube's colours; `modeled`: the body's own
+appearance and the view's edge colour) and whether the cube's rotation arrows and Home button go
+around it. The navigator previews the panel's choices while it is open. OK runs
+`view.navigator`, which scripts and `engine.execute` run too without opening anything:
+`{"style": "custom", "body": "Body1", "texture": "modeled", "arrows": true, "home": false}` (any
+subset; `"body": null` goes back to the cube) returns the whole navigator. A body over 10,000
+triangles is refused, and so is a long or flat one: measured across the axes and the diagonals,
+its thinnest width must be at least a fifth of its widest. The body is kept as a snapshot with the
+preferences and in settings profiles (`settings.profile.*`, as `view_gizmo`), so it stays across
+runs and designs and travels with an exported profile.
 
 Hold Shift during an orbit gesture to snap to the nearest standard or diagonal view. This applies to
 right-drag, the Orbit navigation tool, and dragging either view navigator. Under the default preset,
