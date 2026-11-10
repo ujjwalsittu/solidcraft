@@ -24,6 +24,7 @@ mod ends;
 mod equation;
 mod fonts;
 mod freeform_offset;
+pub mod limits;
 pub mod linalg;
 mod link;
 mod loci;
@@ -35,6 +36,7 @@ mod pattern;
 mod periodic;
 pub mod pierce;
 mod profiles;
+mod profiles3d;
 #[cfg(feature = "solver-profiling")]
 pub mod profiling;
 mod shape;
@@ -59,8 +61,8 @@ pub use fonts::{DEFAULT_FONT_FAMILY, FontData, families_in, find_style_in, font_
 pub use freeform_offset::{FreeformOffset, FreeformOffsetOutput, OFFSET_TOLERANCE};
 pub use link::{Link, LinkGeom, LinkKind, LinkSource, MAX_LINK_ENTITIES, SKETCH_AXIS_HALF, TextExprs, sketch_axis_geom};
 pub use model::{
-    Constraint, ConstraintKind, Curve, CurveKind, MAX_CONSTRAINTS, MAX_COORD, MAX_CURVES, MAX_POINTS, PointExprs, SPoint, Sketch, SketchBatch,
-    SketchError, SketchView, TwoCircles,
+    CEILING_CONSTRAINTS, CEILING_CURVES, CEILING_POINTS, Constraint, ConstraintKind, Curve, CurveKind, MAX_CONSTRAINTS, MAX_COORD, MAX_CURVES,
+    MAX_POINTS, PointExprs, SPoint, Sketch, SketchBatch, SketchError, SketchView, TwoCircles,
 };
 pub use nurbs::Nurbs;
 pub use offset::OffsetChain;
@@ -71,6 +73,7 @@ pub use profiles::{
     CurvePick, ENDPOINT_JOIN_TOL, MAX_PROFILE_EDGES, Profile, ProfileSearch, distinct_curves, find_drawn_profiles, find_profiles,
     find_profiles_checked, merge_regions, profile_at_point, profile_by_curves, without_text_counters,
 };
+pub use profiles3d::{Profile3D, find_planar_3d_profiles};
 pub use shape::{Shape, intersections, intersections_within, nearest_crossing, nearest_curve_intersection};
 pub use solver::solve_after_edit_with_analysis;
 pub use solver::{
