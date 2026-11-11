@@ -1087,13 +1087,19 @@ pub enum FeatureKind {
         #[serde(default, skip_serializing_if = "RailFit::is_scale")]
         rail_fit: RailFit,
     },
-    /// Sweep profiles along a chain of sketch curves.
+    /// Sweep profiles along a chain of sketch curves, or along a chain of a body's edges.
     Sweep {
         sketch: SketchId,
         #[walk(profiles_of = sketch)]
         profiles: ProfileSel,
         path_sketch: SketchId,
         path: Vec<String>,
+        /// The path on a body's edges, instead of the curves of `path_sketch` (#2216): the body
+        /// and a point on each edge of the chain.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path_body: Option<BodyName>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        path_edges: Vec<Position>,
         /// How the profile turns along the path (default: perpendicular to it).
         #[serde(default, skip_serializing_if = "SweepOrientation::is_perpendicular")]
         orientation: SweepOrientation,
@@ -1815,6 +1821,12 @@ pub enum FeatureKind {
         curves: Vec<String>,
         path_sketch: SketchId,
         path: Vec<String>,
+        /// The path on a body's edges, instead of the curves of `path_sketch` (#2216): the body
+        /// and a point on each edge of the chain.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path_body: Option<BodyName>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        path_edges: Vec<Position>,
         /// How the profile turns along the path (default: perpendicular to it).
         #[serde(default, skip_serializing_if = "SweepOrientation::is_perpendicular")]
         orientation: SweepOrientation,
@@ -3399,6 +3411,9 @@ pub struct Document {
     /// Named views: saved cameras.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub named_views: Vec<NamedView>,
+    /// Notes: text anchored to points in model space, drawn as screen-facing callouts (#1631).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<crate::notes::Note>,
     /// What was hidden when the design was saved. A session takes it from here when the design
     /// opens and keeps the live state itself (`browser.visibility`: saved, and undone like any
     /// other change), so a document in a session leaves this empty; the session puts it back when
@@ -3641,6 +3656,7 @@ impl Document {
             .chain(self.timeline_groups.iter().map(|g| g.id))
             .chain(self.canvases.iter().map(|c| c.id))
             .chain(self.point_clouds.iter().map(|c| c.id))
+            .chain(self.notes.iter().map(|n| n.id))
             .chain(a.joints.iter().map(|j| j.id))
             .chain(a.contact_sets.iter().map(|c| c.id))
             .chain(a.studies.iter().map(|s| s.id))
@@ -3696,6 +3712,7 @@ impl Document {
             timeline_groups: Vec::new(),
             browser_order: Default::default(),
             named_views: Vec::new(),
+            notes: Vec::new(),
             visibility: Visibility::default(),
         }
     }
@@ -3899,10 +3916,14 @@ impl Document {
         for b in &mut st.bodies {
             let c = self.body_color(b);
             let face_colors = if authored_faces { self.face_colors(b) } else { self.imported_face_colors(b) };
-            let faces: Vec<solidcraft_kernel::FacePaint> =
-                face_colors.into_iter().map(|(face, l)| solidcraft_kernel::FacePaint { face, color: l.rgb(), opacity: l.opacity as f32 }).collect();
+            let faces: Vec<solidcraft_kernel::FacePaint> = face_colors
+                .into_iter()
+                .map(|(face, l)| solidcraft_kernel::FacePaint { face, color: l.rgb(), opacity: l.opacity as f32, name: l.file_name() })
+                .collect();
             let opacity = self.model_body_opacity(b) as f32;
-            let paint = solidcraft_kernel::Paint { opacity, faces };
+            // The look's name goes with its colour (a STEP `COLOUR_RGB` name), so it comes back on import.
+            let name = c.and_then(|_| self.model_display_look(b)).and_then(|l| l.file_name());
+            let paint = solidcraft_kernel::Paint { opacity, faces, name };
             if c != b.body.color() || b.body.paint() != Some(&paint) {
                 b.body = b.body.clone().with_color(c).with_paint(Some(paint));
             }
